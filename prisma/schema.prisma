@@ -84,11 +84,13 @@ model Asset {
   url         String
   size        Int
   mimeType    String
-  tags        String[]
-  aiTags      String[]
-  deletedAt   DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  tags            String[]
+  aiTags          String[]
+  description     String?
+  usageSuggestion String?
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([workspaceId])
   @@index([workspaceId, deletedAt])
