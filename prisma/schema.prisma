@@ -41,16 +41,18 @@ model Workspace {
 }
 
 model Brand {
-  id          String    @id @default(cuid())
-  workspaceId String
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  name        String
-  logoUrl     String?
-  colors      String[]
-  tagline     String?
-  guidelines  String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id             String    @id @default(cuid())
+  workspaceId    String
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name           String
+  logoUrl        String?
+  primaryColor   String?
+  secondaryColor String?
+  defaultFont    String?
+  tagline        String?
+  guidelines     String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   @@index([workspaceId])
 }
