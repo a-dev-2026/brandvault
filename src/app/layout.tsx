@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
+import { QueryProvider } from '@/components/providers/query-provider';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'BrandVault',
-  description: 'work in progress',
+  title: 'BrandVault - Digital Asset Management',
+  description: 'Manage, organize, and enrich your digital brand assets.',
 };
 
 export default function RootLayout({
@@ -13,7 +14,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <QueryProvider>{children}</QueryProvider>
+      </body>
     </html>
   );
 }
