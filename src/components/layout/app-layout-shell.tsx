@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
@@ -11,6 +11,8 @@ import {
   Menu,
   X,
   ShieldCheck,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -44,6 +46,33 @@ export function AppLayoutShell({ user, children }: AppLayoutShellProps) {
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(false);
+
+  // Initialize Dark Mode theme from localStorage or system preference
+  useEffect(() => {
+    const storedTheme = localStorage.getItem('theme');
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const shouldBeDark = storedTheme === 'dark' || (!storedTheme && prefersDark);
+
+    setIsDarkMode(shouldBeDark);
+    if (shouldBeDark) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, []);
+
+  const toggleDarkMode = () => {
+    const nextDark = !isDarkMode;
+    setIsDarkMode(nextDark);
+    if (nextDark) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  };
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -70,7 +99,7 @@ export function AppLayoutShell({ user, children }: AppLayoutShellProps) {
           <span className="text-lg font-bold tracking-tight">BrandVault</span>
         </div>
 
-        <nav className="flex-1 space-y-1">
+        <nav className="flex-1 space-y-1" aria-label="Main Navigation">
           {navItems.map((item) => {
             const isActive =
               item.href === '/'
@@ -81,7 +110,7 @@ export function AppLayoutShell({ user, children }: AppLayoutShellProps) {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center space-x-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                className={`flex items-center space-x-3 rounded-md px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                   isActive
                     ? 'bg-primary/10 text-primary font-semibold'
                     : 'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -112,17 +141,29 @@ export function AppLayoutShell({ user, children }: AppLayoutShellProps) {
               size="icon"
               className="md:hidden"
               onClick={() => setMobileOpen(!mobileOpen)}
-              aria-label="Toggle Navigation"
+              aria-label={mobileOpen ? 'Close navigation menu' : 'Open navigation menu'}
             >
               {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </Button>
             <span className="text-base font-semibold md:hidden">BrandVault</span>
           </div>
 
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-3">
+            {/* Dark Mode Toggle Button */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleDarkMode}
+              aria-label={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+              title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {isDarkMode ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4 text-slate-700" />}
+            </Button>
+
+            {/* User Profile Dropdown Menu */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="space-x-2">
+                <Button variant="outline" size="sm" className="space-x-2" aria-label="User menu dropdown">
                   <div className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/20 text-xs font-semibold text-primary">
                     {user.email.charAt(0).toUpperCase()}
                   </div>
@@ -155,7 +196,7 @@ export function AppLayoutShell({ user, children }: AppLayoutShellProps) {
         {/* Mobile Collapsible Nav Drawer */}
         {mobileOpen && (
           <div className="border-b bg-card px-4 py-3 md:hidden">
-            <nav className="space-y-1">
+            <nav className="space-y-1" aria-label="Mobile Navigation">
               {navItems.map((item) => {
                 const isActive =
                   item.href === '/'

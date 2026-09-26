@@ -107,7 +107,7 @@ export default function LoginPage() {
               {isDemoLoading ? 'Preparing Demo Workspace...' : 'Continue as Demo User'}
             </Button>
             <p className="text-center text-xs text-muted-foreground">
-              Demo Credentials: <span className="font-mono font-medium text-foreground">demo@brandvault.dev</span> / <span className="font-mono font-medium text-foreground">Demo1234!</span>
+              Demo Credentials: <span className="font-mono font-medium text-foreground">brandvault@ignitebh.com</span> / <span className="font-mono font-medium text-foreground">Password123!</span>
             </p>
           </div>
 

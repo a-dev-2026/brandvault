@@ -29,6 +29,10 @@ import {
   FolderInput,
   Trash2,
   X,
+  Sparkles,
+  Info,
+  Check,
+  Eye,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -102,6 +106,12 @@ export interface AssetsResponse {
   nextCursor: string | null;
 }
 
+export interface AiSuggestionResponse {
+  tags: string[];
+  description: string;
+  usage_suggestion: string;
+}
+
 const ASSET_TYPES = ['LOGO', 'ICON', 'BANNER', 'FONT', 'VIDEO', 'DOCUMENT', 'OTHER'] as const;
 
 // Schemas
@@ -136,12 +146,10 @@ function LibraryContent() {
   // Local search state for 300ms debouncing
   const [searchTerm, setSearchTerm] = useState(urlQuery);
 
-  // Sync local searchTerm when URL changes externally (e.g. back button / clear button)
   useEffect(() => {
     setSearchTerm(urlQuery);
   }, [urlQuery]);
 
-  // 300ms Debounce effect to push searchTerm to ?q=
   useEffect(() => {
     const timer = setTimeout(() => {
       if (searchTerm !== urlQuery) {
@@ -170,10 +178,20 @@ function LibraryContent() {
   const [movingAsset, setMovingAsset] = useState<AssetItem | null>(null);
   const [targetMoveFolderId, setTargetMoveFolderId] = useState<string>('root');
 
+  // Asset Detail Modal State
+  const [viewingAssetDetail, setViewingAssetDetail] = useState<AssetItem | null>(null);
+
+  // AI Tagging Dialog States
+  const [aiTaggingAsset, setAiTaggingAsset] = useState<AssetItem | null>(null);
+  const [editableAiTags, setEditableAiTags] = useState<string[]>([]);
+  const [editableDescription, setEditableDescription] = useState<string>('');
+  const [editableUsage, setEditableUsage] = useState<string>('');
+  const [newTagInput, setNewTagInput] = useState<string>('');
+  const [aiError, setAiError] = useState<{ status?: number; code?: string; message: string } | null>(null);
+
   // Track failed image URLs
   const [failedImageUrls, setFailedImageUrls] = useState<Record<string, boolean>>({});
 
-  // Helper to update URL search params while preserving existing ones
   const updateParams = (updates: Record<string, string | null>) => {
     const params = new URLSearchParams(searchParams.toString());
     Object.entries(updates).forEach(([key, value]) => {
@@ -191,7 +209,7 @@ function LibraryContent() {
     updateParams({ q: null });
   };
 
-  // 1. Fetch Current Folder Details & Breadcrumbs (when inside subfolder)
+  // 1. Fetch Current Folder Details & Breadcrumbs
   const {
     data: folderDetails,
     isLoading: isFolderDetailsLoading,
@@ -213,16 +231,16 @@ function LibraryContent() {
   } = useQuery<FolderItem[], ApiClientError>({
     queryKey: ['folders', parentIdParam],
     queryFn: () => apiClient.get<FolderItem[]>(`/api/folders?parentId=${parentIdParam}`),
-    enabled: !urlQuery, // Hide subfolder query when performing workspace-wide search
+    enabled: !urlQuery,
   });
 
-  // 3. Fetch All Workspace Folders (for asset dialog folder selectors)
+  // 3. Fetch All Workspace Folders
   const { data: allFolders = [] } = useQuery<FolderItem[], ApiClientError>({
     queryKey: ['all-folders'],
     queryFn: () => apiClient.get<FolderItem[]>('/api/folders'),
   });
 
-  // 4. Fetch Assets (Workspace-wide when `q` is active, or scoped to folder)
+  // 4. Fetch Assets
   const folderIdParam = currentFolderId || 'root';
   const assetsQueryKey = ['assets', folderIdParam, urlQuery, currentSort];
   const {
@@ -235,7 +253,6 @@ function LibraryContent() {
     queryFn: () => {
       const params = new URLSearchParams();
       if (urlQuery) {
-        // Workspace-wide search across all folders
         params.set('q', urlQuery);
       } else if (currentFolderId) {
         params.set('folderId', currentFolderId);
@@ -453,6 +470,81 @@ function LibraryContent() {
     },
   });
 
+  // 9. AI Tag Generation & Saving Mutations
+  const generateAiTagsMutation = useMutation({
+    mutationFn: (assetId: string) =>
+      apiClient.post<AiSuggestionResponse>(`/api/assets/${assetId}/ai-tags`),
+    onSuccess: (data) => {
+      setEditableAiTags(data.tags || []);
+      setEditableDescription(data.description || '');
+      setEditableUsage(data.usage_suggestion || '');
+      setAiError(null);
+    },
+    onError: (err: ApiClientError) => {
+      if (err.status === 502 || err.code === 'AI_UNAVAILABLE' || err.code === 'AI_INVALID_RESPONSE') {
+        setAiError({
+          status: 502,
+          code: err.code,
+          message: 'AI service is temporarily unavailable',
+        });
+      } else if (err.status === 429 || err.code === 'RATE_LIMIT_EXCEEDED') {
+        setAiError({
+          status: 429,
+          code: err.code,
+          message: 'Too many requests, try again shortly',
+        });
+      } else {
+        setAiError({
+          status: err.status || 400,
+          code: err.code,
+          message: err.message || 'Failed to generate AI tags',
+        });
+      }
+    },
+  });
+
+  const saveAiTagsMutation = useMutation({
+    mutationFn: ({
+      assetId,
+      payload,
+    }: {
+      assetId: string;
+      payload: { tags: string[]; description?: string | null; usage_suggestion?: string | null };
+    }) => apiClient.patch<AssetItem>(`/api/assets/${assetId}/ai-tags/save`, payload),
+    onSuccess: (updatedAsset) => {
+      queryClient.invalidateQueries({ queryKey: ['assets'] });
+      if (viewingAssetDetail && viewingAssetDetail.id === updatedAsset.id) {
+        setViewingAssetDetail(updatedAsset);
+      }
+      toast.success('AI tags and metadata saved!');
+      setAiTaggingAsset(null);
+    },
+    onError: (err: ApiClientError) => {
+      toast.error(err.message || 'Failed to save AI metadata');
+    },
+  });
+
+  const handleStartAiTagging = (asset: AssetItem) => {
+    setAiTaggingAsset(asset);
+    setAiError(null);
+    setEditableAiTags([]);
+    setEditableDescription('');
+    setEditableUsage('');
+    generateAiTagsMutation.mutate(asset.id);
+  };
+
+  const handleAddCustomTag = () => {
+    const trimmed = newTagInput.trim().toLowerCase();
+    if (trimmed && !editableAiTags.includes(trimmed)) {
+      setEditableAiTags([...editableAiTags, trimmed]);
+      setNewTagInput('');
+    }
+  };
+
+  const handleRemoveAiTag = (tagToRemove: string) => {
+    setEditableAiTags(editableAiTags.filter((t) => t !== tagToRemove));
+  };
+
   const isGlobalLoading = isFolderDetailsLoading || isFoldersLoading || isAssetsLoading;
   const isGlobalError = isFolderDetailsError || isFoldersError || isAssetsError;
 
@@ -462,7 +554,6 @@ function LibraryContent() {
     refetchAssets();
   };
 
-  // Asset type icon selector
   const getAssetTypeIcon = (type: string) => {
     switch (type) {
       case 'LOGO':
@@ -478,7 +569,6 @@ function LibraryContent() {
     }
   };
 
-  // Format date helper
   const formatDate = (dateString: string) => {
     try {
       return new Date(dateString).toLocaleDateString('en-US', {
@@ -773,11 +863,361 @@ function LibraryContent() {
         </DialogContent>
       </Dialog>
 
+      {/* Asset Detail View Modal Dialog */}
+      <Dialog
+        open={Boolean(viewingAssetDetail)}
+        onOpenChange={(open) => {
+          if (!open) setViewingAssetDetail(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between">
+              <span className="truncate pr-4">{viewingAssetDetail?.name}</span>
+              <Badge variant="outline" className="font-mono text-xs uppercase">
+                {viewingAssetDetail?.type}
+              </Badge>
+            </DialogTitle>
+            <DialogDescription>
+              Folder: {viewingAssetDetail?.folder ? viewingAssetDetail.folder.name : 'Root Directory'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {viewingAssetDetail && (
+            <div className="space-y-6 pt-2">
+              {/* Asset Preview */}
+              <div className="flex h-48 w-full items-center justify-center rounded-lg border bg-muted/30 overflow-hidden">
+                {viewingAssetDetail.mimeType.startsWith('image/') ||
+                ['LOGO', 'ICON', 'BANNER'].includes(viewingAssetDetail.type) ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={viewingAssetDetail.url}
+                    alt={viewingAssetDetail.name}
+                    className="h-full w-full object-contain p-2"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center text-muted-foreground">
+                    {getAssetTypeIcon(viewingAssetDetail.type)}
+                    <span className="mt-2 text-sm uppercase font-mono">{viewingAssetDetail.type}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Tags Section */}
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Tags
+                </Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {/* User Tags */}
+                  {viewingAssetDetail.tags?.map((tag, idx) => (
+                    <Badge key={`user-${idx}`} variant="secondary" className="text-xs">
+                      <Tag className="mr-1 h-3 w-3 opacity-60" />
+                      {tag}
+                    </Badge>
+                  ))}
+                  {/* AI Tags */}
+                  {viewingAssetDetail.aiTags?.map((tag, idx) => (
+                    <Badge
+                      key={`ai-${idx}`}
+                      variant="secondary"
+                      className="bg-purple-500/15 text-purple-700 dark:text-purple-300 text-xs border-purple-500/20"
+                    >
+                      <Sparkles className="mr-1 h-3 w-3 text-purple-500" />
+                      {tag}
+                    </Badge>
+                  ))}
+                  {(!viewingAssetDetail.tags || viewingAssetDetail.tags.length === 0) &&
+                    (!viewingAssetDetail.aiTags || viewingAssetDetail.aiTags.length === 0) && (
+                      <p className="text-xs text-muted-foreground">No tags attached yet.</p>
+                    )}
+                </div>
+              </div>
+
+              {/* Description Section */}
+              {viewingAssetDetail.description && (
+                <div className="space-y-1.5 rounded-lg border bg-muted/20 p-3">
+                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    AI Description
+                  </Label>
+                  <p className="text-sm leading-relaxed">{viewingAssetDetail.description}</p>
+                </div>
+              )}
+
+              {/* Usage Suggestion Section */}
+              {viewingAssetDetail.usageSuggestion && (
+                <div className="space-y-1.5 rounded-lg border bg-indigo-500/5 border-indigo-500/20 p-3">
+                  <Label className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                    Usage Suggestion
+                  </Label>
+                  <p className="text-sm text-foreground leading-relaxed">
+                    {viewingAssetDetail.usageSuggestion}
+                  </p>
+                </div>
+              )}
+
+              {/* Asset URL & Metadata */}
+              <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
+                <span>Updated: {formatDate(viewingAssetDetail.updatedAt)}</span>
+                <a
+                  href={viewingAssetDetail.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center text-primary font-medium hover:underline"
+                  aria-label="Open original asset file in new tab"
+                >
+                  <ExternalLink className="mr-1 h-3.5 w-3.5" />
+                  View Original File
+                </a>
+              </div>
+
+              <DialogFooter className="pt-2 flex items-center justify-between sm:justify-between w-full">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const currentAsset = viewingAssetDetail;
+                    setViewingAssetDetail(null);
+                    handleStartAiTagging(currentAsset);
+                  }}
+                  className="text-purple-600 border-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/30"
+                >
+                  <Sparkles className="mr-1.5 h-4 w-4" />
+                  Generate AI Tags
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setViewingAssetDetail(null)}
+                >
+                  Close
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* AI Tagging Engine Dialog Modal */}
+      <Dialog
+        open={Boolean(aiTaggingAsset)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAiTaggingAsset(null);
+            setAiError(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <Sparkles className="mr-2 h-5 w-5 text-purple-600" />
+              AI Asset Metadata Review
+            </DialogTitle>
+            <DialogDescription>
+              AI Suggestions for &quot;<span className="font-semibold">{aiTaggingAsset?.name}</span>&quot;.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 pt-2">
+            {/* 1. Loading State */}
+            {generateAiTagsMutation.isPending && (
+              <div className="flex flex-col items-center justify-center space-y-3 py-12 text-center">
+                <RefreshCw className="h-8 w-8 animate-spin text-purple-600" />
+                <p className="text-sm font-medium text-foreground">Analyzing asset details...</p>
+                <p className="text-xs text-muted-foreground max-w-xs">
+                  Extracting context from asset name, type, brand guidelines, and folder location.
+                </p>
+              </div>
+            )}
+
+            {/* 2. Error State */}
+            {!generateAiTagsMutation.isPending && aiError && (
+              <div className="space-y-4 py-4">
+                <div className="flex items-start space-x-3 rounded-lg border bg-destructive/10 p-4 text-destructive border-destructive/20">
+                  <ShieldAlert className="h-5 w-5 shrink-0 mt-0.5" />
+                  <div>
+                    <h4 className="text-sm font-bold">
+                      {aiError.status === 429
+                        ? 'Rate Limit Reached'
+                        : 'AI Generation Failed'}
+                    </h4>
+                    <p className="mt-1 text-xs">{aiError.message}</p>
+                  </div>
+                </div>
+
+                <DialogFooter className="pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setAiTaggingAsset(null)}
+                  >
+                    Cancel
+                  </Button>
+                  {aiError.status !== 429 && aiTaggingAsset && (
+                    <Button
+                      onClick={() => generateAiTagsMutation.mutate(aiTaggingAsset.id)}
+                    >
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Retry
+                    </Button>
+                  )}
+                </DialogFooter>
+              </div>
+            )}
+
+            {/* 3. Editable Review Form */}
+            {!generateAiTagsMutation.isPending && !aiError && aiTaggingAsset && (
+              <div className="space-y-4">
+                {/* Disclaimer Note */}
+                <div className="flex items-start space-x-2 rounded-md bg-muted/60 p-2.5 text-xs text-muted-foreground border">
+                  <Info className="h-4 w-4 shrink-0 text-primary mt-0.5" />
+                  <span>
+                    AI-generated from name, type, URL, folder and brand only. Review before saving.
+                  </span>
+                </div>
+
+                {/* Editable Tags Chips */}
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Tags ({editableAiTags.length})
+                  </Label>
+                  <div className="flex flex-wrap gap-1.5 rounded-lg border bg-background p-2.5 min-h-[42px]">
+                    {editableAiTags.map((tag, idx) => (
+                      <Badge
+                        key={idx}
+                        variant="secondary"
+                        className="bg-purple-500/15 text-purple-700 dark:text-purple-300 text-xs flex items-center gap-1 pr-1 border-purple-500/20"
+                      >
+                        <span>{tag}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveAiTag(tag)}
+                          className="rounded-full hover:bg-purple-500/20 p-0.5 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                          aria-label={`Remove tag ${tag}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+
+                  {/* Add Tag Input */}
+                  <div className="flex items-center space-x-2 pt-1">
+                    <Input
+                      placeholder="Add custom tag..."
+                      value={newTagInput}
+                      onChange={(e) => setNewTagInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddCustomTag();
+                        }
+                      }}
+                      className="h-8 text-xs flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleAddCustomTag}
+                      className="h-8 text-xs"
+                    >
+                      <Plus className="mr-1 h-3 w-3" /> Add
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Editable Description Textarea */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="aiDesc" className="text-xs font-semibold">
+                    Description
+                  </Label>
+                  <textarea
+                    id="aiDesc"
+                    rows={3}
+                    value={editableDescription}
+                    onChange={(e) => setEditableDescription(e.target.value)}
+                    className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    placeholder="AI generated asset description..."
+                  />
+                </div>
+
+                {/* Editable Usage Suggestion Textarea */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="aiUsage" className="text-xs font-semibold">
+                    Usage Suggestion
+                  </Label>
+                  <textarea
+                    id="aiUsage"
+                    rows={2}
+                    value={editableUsage}
+                    onChange={(e) => setEditableUsage(e.target.value)}
+                    className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    placeholder="AI generated usage recommendation..."
+                  />
+                </div>
+
+                {/* Form Buttons */}
+                <DialogFooter className="pt-3 flex items-center justify-between sm:justify-between w-full">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => generateAiTagsMutation.mutate(aiTaggingAsset.id)}
+                    disabled={saveAiTagsMutation.isPending}
+                    className="text-xs text-muted-foreground"
+                  >
+                    <RefreshCw className="mr-1 h-3.5 w-3.5" />
+                    Regenerate
+                  </Button>
+
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setAiTaggingAsset(null)}
+                      disabled={saveAiTagsMutation.isPending}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => {
+                        saveAiTagsMutation.mutate({
+                          assetId: aiTaggingAsset.id,
+                          payload: {
+                            tags: editableAiTags,
+                            description: editableDescription.trim() || null,
+                            usage_suggestion: editableUsage.trim() || null,
+                          },
+                        });
+                      }}
+                      disabled={saveAiTagsMutation.isPending}
+                    >
+                      {saveAiTagsMutation.isPending ? (
+                        'Saving...'
+                      ) : (
+                        <>
+                          <Check className="mr-1.5 h-3.5 w-3.5" /> Save
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </DialogFooter>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Breadcrumb Pathing */}
       <div className="flex flex-wrap items-center gap-1.5 rounded-lg border bg-card px-3 py-2 text-sm">
         <button
           onClick={() => updateParams({ folder: null })}
-          className={`flex items-center space-x-1 hover:text-primary transition-colors ${
+          className={`flex items-center space-x-1 hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
             !currentFolderId ? 'font-semibold text-primary' : 'text-muted-foreground'
           }`}
         >
@@ -792,7 +1232,7 @@ function LibraryContent() {
               <ChevronRight className="h-4 w-4 text-muted-foreground/60 shrink-0" />
               <button
                 onClick={() => updateParams({ folder: crumb.id })}
-                className={`truncate max-w-[160px] hover:text-primary transition-colors ${
+                className={`truncate max-w-[160px] hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
                   isCurrent ? 'font-semibold text-primary' : 'text-muted-foreground'
                 }`}
               >
@@ -803,7 +1243,7 @@ function LibraryContent() {
         })}
       </div>
 
-      {/* Search (Debounced 300ms) & Sort Controls */}
+      {/* Search & Sort Controls */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative flex-1 sm:max-w-md">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -813,11 +1253,13 @@ function LibraryContent() {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-8 pr-8"
+            aria-label="Search workspace assets"
           />
           {searchTerm && (
             <button
               onClick={clearSearch}
-              className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground transition-colors"
+              className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              aria-label="Clear search input"
               title="Clear search"
             >
               <X className="h-4 w-4" />
@@ -828,7 +1270,7 @@ function LibraryContent() {
         <div className="flex items-center space-x-2">
           <ArrowUpDown className="h-4 w-4 text-muted-foreground shrink-0" />
           <Select value={currentSort} onValueChange={(val) => updateParams({ sort: val })}>
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-[180px]" aria-label="Sort order selection">
               <SelectValue placeholder="Sort order" />
             </SelectTrigger>
             <SelectContent>
@@ -860,7 +1302,7 @@ function LibraryContent() {
       {/* 1. Global Loading Skeleton */}
       {isGlobalLoading && (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
             {[1, 2, 3, 4].map((i) => (
               <Skeleton key={i} className="h-24 w-full rounded-xl" />
             ))}
@@ -895,7 +1337,7 @@ function LibraryContent() {
       {/* 3. Normal Data Render */}
       {!isGlobalLoading && !isGlobalError && (
         <div className="space-y-8">
-          {/* Subfolders Section (Hidden when performing workspace-wide search) */}
+          {/* Subfolders Section */}
           {!urlQuery && folders.length > 0 && (
             <div className="space-y-3">
               <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
@@ -906,7 +1348,7 @@ function LibraryContent() {
                   <button
                     key={f.id}
                     onClick={() => updateParams({ folder: f.id })}
-                    className="flex flex-col items-start p-3 text-left rounded-xl border bg-card hover:bg-accent/50 hover:border-primary/50 transition-all shadow-sm group"
+                    className="flex flex-col items-start p-3 text-left rounded-xl border bg-card hover:bg-accent/50 hover:border-primary/50 transition-all shadow-sm group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary group-hover:scale-105 transition-transform mb-2">
                       <Folder className="h-5 w-5 fill-primary/20" />
@@ -938,16 +1380,29 @@ function LibraryContent() {
                   const folderName = asset.folder ? asset.folder.name : 'Root';
 
                   return (
-                    <Card key={asset.id} className="overflow-hidden hover:shadow-md transition-shadow group relative">
+                    <Card key={asset.id} className="overflow-hidden hover:shadow-md transition-shadow group relative flex flex-col justify-between">
                       {/* Top Action Menu Button */}
                       <div className="absolute right-2 top-2 z-10">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="secondary" size="icon" className="h-7 w-7 opacity-80 group-hover:opacity-100 bg-background/80 backdrop-blur">
+                            <Button
+                              variant="secondary"
+                              size="icon"
+                              className="h-7 w-7 opacity-80 group-hover:opacity-100 bg-background/80 backdrop-blur"
+                              aria-label={`Asset actions for ${asset.name}`}
+                            >
                               <MoreVertical className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => setViewingAssetDetail(asset)}>
+                              <Eye className="mr-2 h-4 w-4" />
+                              View Details
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleStartAiTagging(asset)}>
+                              <Sparkles className="mr-2 h-4 w-4 text-purple-600" />
+                              Generate AI Tags
+                            </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => {
                                 setEditingAsset(asset);
@@ -980,7 +1435,12 @@ function LibraryContent() {
                       </div>
 
                       {/* Thumbnail / Image Preview */}
-                      <div className="relative flex h-36 w-full items-center justify-center bg-muted/40 border-b overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setViewingAssetDetail(asset)}
+                        className="relative flex h-36 w-full items-center justify-center bg-muted/40 border-b overflow-hidden text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        aria-label={`View details for ${asset.name}`}
+                      >
                         {isImageLike && !isFailedImage ? (
                           /* eslint-disable-next-line @next/next/no-img-element */
                           <img
@@ -997,35 +1457,51 @@ function LibraryContent() {
                             <span className="mt-1 text-xs uppercase font-mono">{asset.type}</span>
                           </div>
                         )}
-                      </div>
+                      </button>
 
-                      <CardContent className="p-4 space-y-2">
-                        <div className="flex items-start justify-between gap-2 pr-6">
-                          <h3 className="text-sm font-semibold truncate flex-1" title={asset.name}>
-                            {asset.name}
-                          </h3>
-                          <Badge variant="outline" className="text-[10px] shrink-0 font-mono">
-                            {asset.type}
-                          </Badge>
-                        </div>
+                      <CardContent className="p-4 space-y-2 flex-1 flex flex-col justify-between">
+                        <div className="space-y-2">
+                          <div className="flex items-start justify-between gap-2 pr-6">
+                            <h3
+                              className="text-sm font-semibold truncate flex-1 cursor-pointer hover:text-primary transition-colors"
+                              title={asset.name}
+                              onClick={() => setViewingAssetDetail(asset)}
+                            >
+                              {asset.name}
+                            </h3>
+                            <Badge variant="outline" className="text-[10px] shrink-0 font-mono">
+                              {asset.type}
+                            </Badge>
+                          </div>
 
-                        {/* Tags */}
-                        {asset.tags && asset.tags.length > 0 && (
+                          {/* User & AI Tags Badges */}
                           <div className="flex flex-wrap gap-1">
-                            {asset.tags.slice(0, 3).map((tag, idx) => (
+                            {/* Standard Tags */}
+                            {asset.tags?.slice(0, 2).map((tag, idx) => (
                               <span
-                                key={idx}
+                                key={`tag-${idx}`}
                                 className="inline-flex items-center text-[10px] bg-secondary text-secondary-foreground rounded px-1.5 py-0.5"
                               >
                                 <Tag className="mr-0.5 h-2.5 w-2.5 opacity-60" />
                                 {tag}
                               </span>
                             ))}
+
+                            {/* AI Tags Badges */}
+                            {asset.aiTags?.slice(0, 2).map((tag, idx) => (
+                              <span
+                                key={`aitag-${idx}`}
+                                className="inline-flex items-center text-[10px] bg-purple-500/15 text-purple-700 dark:text-purple-300 rounded px-1.5 py-0.5 font-medium"
+                              >
+                                <Sparkles className="mr-0.5 h-2.5 w-2.5 text-purple-500" />
+                                {tag}
+                              </span>
+                            ))}
                           </div>
-                        )}
+                        </div>
 
                         {/* Details Footer with Folder Path Badge */}
-                        <div className="flex items-center justify-between pt-2 text-[11px] text-muted-foreground border-t">
+                        <div className="flex items-center justify-between pt-2 text-[11px] text-muted-foreground border-t mt-auto">
                           <span className="flex items-center">
                             <Calendar className="mr-1 h-3 w-3" />
                             {formatDate(asset.updatedAt)}
@@ -1038,8 +1514,9 @@ function LibraryContent() {
                             href={asset.url}
                             target="_blank"
                             rel="noreferrer"
-                            className="hover:text-primary transition-colors"
+                            className="hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                             title="Open asset link"
+                            aria-label={`Open asset ${asset.name} link in new tab`}
                           >
                             <ExternalLink className="h-3.5 w-3.5" />
                           </a>
