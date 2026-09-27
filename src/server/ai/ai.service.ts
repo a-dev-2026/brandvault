@@ -96,8 +96,8 @@ export async function generateAssetTags(workspaceId: string, userId: string, ass
       }
       lastError = validationResult.error;
     } catch (err) {
-      if (err instanceof ApiError && err.code === 'BAD_GATEWAY') {
-        throw new ApiError(502, 'AI_UNAVAILABLE', 'AI service is temporarily unavailable');
+      if (err instanceof ApiError) {
+        throw err;
       }
       lastError = err;
     }

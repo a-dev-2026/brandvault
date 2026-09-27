@@ -6,7 +6,7 @@ export async function generateJson(systemPrompt: string, userPrompt: string): Pr
 
   if (!apiKey) {
     console.error('[AI Provider Error]: AI_API_KEY environment variable is missing.');
-    throw ApiError.badGateway('AI service is not configured');
+    throw ApiError.badGateway('AI service is not configured: AI_API_KEY environment variable is missing');
   }
 
   const endpoint = 'https://api.groq.com/openai/v1/chat/completions';
@@ -35,10 +35,12 @@ export async function generateJson(systemPrompt: string, userPrompt: string): Pr
     clearTimeout(timeoutId);
 
     if (!response.ok) {
+      const errJson = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
+      const detail = errJson?.error?.message || response.statusText || 'Unknown error';
       console.error(
-        `[AI Provider Error]: Service returned HTTP status ${response.status} (${response.statusText})`
+        `[AI Provider Error]: Service returned HTTP status ${response.status} (${response.statusText}): ${detail}`
       );
-      throw ApiError.badGateway('AI service provider error');
+      throw ApiError.badGateway(`AI provider error (HTTP ${response.status}): ${detail}`);
     }
 
     const data = (await response.json()) as {

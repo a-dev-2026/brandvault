@@ -485,7 +485,7 @@ function LibraryContent() {
         setAiError({
           status: 502,
           code: err.code,
-          message: 'AI service is temporarily unavailable',
+          message: err.message || 'AI service is temporarily unavailable',
         });
       } else if (err.status === 429 || err.code === 'RATE_LIMIT_EXCEEDED') {
         setAiError({
