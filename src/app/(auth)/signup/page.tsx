@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 
 const signupSchema = z.object({
+  name: z.string().trim().min(1, 'Full name is required'),
   email: z.string().trim().min(1, 'Email is required').email('Please enter a valid email address'),
   password: z.string().min(8, 'Password must be at least 8 characters long'),
   workspaceName: z.string().trim().optional(),
@@ -36,6 +37,7 @@ export default function SignupPage() {
   } = useForm<SignupFormValues>({
     resolver: zodResolver(signupSchema),
     defaultValues: {
+      name: '',
       email: '',
       password: '',
       workspaceName: '',
@@ -46,6 +48,7 @@ export default function SignupPage() {
     setServerError(null);
     try {
       await apiClient.post('/api/auth/signup', {
+        name: values.name,
         email: values.email,
         password: values.password,
         workspaceName: values.workspaceName || undefined,
@@ -84,6 +87,21 @@ export default function SignupPage() {
           )}
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+            <div className="space-y-1.5">
+              <Label htmlFor="name">Full Name</Label>
+              <Input
+                id="name"
+                type="text"
+                placeholder="Ali Hussain"
+                disabled={isSubmitting}
+                {...register('name')}
+                className={errors.name ? 'border-destructive focus-visible:ring-destructive' : ''}
+              />
+              {errors.name && (
+                <p className="text-xs font-medium text-destructive">{errors.name.message}</p>
+              )}
+            </div>
+
             <div className="space-y-1.5">
               <Label htmlFor="email">Email address</Label>
               <Input

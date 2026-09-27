@@ -33,6 +33,7 @@ export interface AppLayoutShellProps {
     userId: string;
     workspaceId: string;
     workspaceName?: string;
+    name?: string | null;
   };
   children: React.ReactNode;
 }
@@ -169,18 +170,18 @@ export function AppLayoutShell({ user, children }: AppLayoutShellProps) {
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="space-x-2" aria-label="User menu dropdown">
                   <div className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/20 text-xs font-semibold text-primary">
-                    {user.email.charAt(0).toUpperCase()}
+                    {(user.name || user.email).charAt(0).toUpperCase()}
                   </div>
                   <span className="hidden text-sm font-medium sm:inline-block">
-                    {user.email}
+                    {user.name || user.email}
                   </span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel className="font-normal">
                   <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">{user.email}</p>
-                    <p className="text-xs text-muted-foreground">Workspace ID: {user.workspaceId.slice(0, 8)}...</p>
+                    <p className="text-sm font-medium leading-none">{user.name || user.email}</p>
+                    <p className="text-xs text-muted-foreground">{user.email}</p>
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />

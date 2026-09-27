@@ -21,15 +21,22 @@ export default async function AuthenticatedAppLayout({
     redirect('/login');
   }
 
-  const workspace = await db.workspace.findUnique({
-    where: { id: session.workspaceId },
-    select: { name: true },
-  });
+  const [workspace, userRecord] = await Promise.all([
+    db.workspace.findUnique({
+      where: { id: session.workspaceId },
+      select: { name: true },
+    }),
+    db.user.findUnique({
+      where: { id: session.userId },
+      select: { name: true },
+    }),
+  ]);
 
   const workspaceName = workspace?.name || 'Main';
+  const name = userRecord?.name || null;
 
   return (
-    <AppLayoutShell user={{ ...session, workspaceName }}>
+    <AppLayoutShell user={{ ...session, workspaceName, name }}>
       {children}
     </AppLayoutShell>
   );
