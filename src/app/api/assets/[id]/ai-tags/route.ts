@@ -3,6 +3,9 @@ import { json, RouteContext, withErrorHandling } from '@/lib/api';
 import { requireUser } from '@/server/auth';
 import { generateAssetTags } from '@/server/ai/ai.service';
 
+export const dynamic = 'force-dynamic';
+export const maxDuration = 30;
+
 export const POST = withErrorHandling(async (req: NextRequest, context: RouteContext) => {
   const session = await requireUser(req);
   const { id } = await context.params;

@@ -2,7 +2,7 @@ import { ApiError } from '@/lib/api';
 
 export async function generateJson(systemPrompt: string, userPrompt: string): Promise<string> {
   const apiKey = process.env.AI_API_KEY;
-  const model = process.env.AI_MODEL;
+  const model = process.env.AI_MODEL || 'openai/gpt-oss-20b';
 
   if (!apiKey) {
     console.error('[AI Provider Error]: AI_API_KEY environment variable is missing.');

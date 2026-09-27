@@ -4,7 +4,11 @@ import { ApiError, json, withErrorHandling } from '@/lib/api';
 import { createSessionToken, setAuthCookie } from '@/server/auth';
 
 export const POST = withErrorHandling(async (_req: NextRequest) => {
-  const email = process.env.DEMO_EMAIL!.trim().toLowerCase();
+  const email = process.env.DEMO_EMAIL?.trim().toLowerCase();
+
+  if (!email) {
+    throw ApiError.badRequest('DEMO_EMAIL environment variable is not configured');
+  }
 
   const user = await db.user.findUnique({
     where: { email },
