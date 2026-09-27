@@ -36,7 +36,7 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
   if (!workspaceId) {
     const newWorkspace = await db.workspace.create({
       data: {
-        name: `${user.email.split('@')[0]}'s Workspace`,
+        name: 'Main',
         userId: user.id,
       },
     });

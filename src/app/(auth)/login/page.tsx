@@ -6,13 +6,15 @@ import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { ShieldCheck, LogIn, Sparkles, AlertCircle } from 'lucide-react';
+import { ShieldCheck, LogIn, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { apiClient } from '@/lib/api-client';
 import { toast } from 'sonner';
+
+import { useQueryClient } from '@tanstack/react-query';
 
 const loginSchema = z.object({
   email: z.string().trim().min(1, 'Email is required').email('Please enter a valid email address'),
@@ -23,8 +25,8 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [serverError, setServerError] = useState<string | null>(null);
-  const [isDemoLoading, setIsDemoLoading] = useState(false);
 
   const {
     register,
@@ -42,6 +44,7 @@ export default function LoginPage() {
     setServerError(null);
     try {
       await apiClient.post('/api/auth/login', values);
+      queryClient.clear();
       toast.success('Signed in successfully');
       router.push('/library');
       router.refresh();
@@ -51,25 +54,6 @@ export default function LoginPage() {
       toast.error(msg);
     }
   };
-
-  const handleDemoLogin = async () => {
-    setServerError(null);
-    setIsDemoLoading(true);
-    try {
-      await apiClient.post('/api/auth/demo');
-      toast.success('Logged in as Demo User');
-      router.push('/library');
-      router.refresh();
-    } catch (err: any) {
-      const msg = err.message || 'Demo login failed';
-      setServerError(msg);
-      toast.error(msg);
-    } finally {
-      setIsDemoLoading(false);
-    }
-  };
-
-  const isPending = isSubmitting || isDemoLoading;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4 py-12">
@@ -93,31 +77,6 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* Prominent Demo Button */}
-          <div className="space-y-1.5">
-            <Button
-              type="button"
-              variant="default"
-              size="lg"
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-md transition-all"
-              onClick={handleDemoLogin}
-              disabled={isPending}
-            >
-              <Sparkles className="mr-2 h-5 w-5" />
-              {isDemoLoading ? 'Preparing Demo Workspace...' : 'Continue as Demo User'}
-            </Button>
-            <p className="text-center text-xs text-muted-foreground">
-              Demo Credentials: <span className="font-mono font-medium text-foreground">brandvault@ignitebh.com</span> / <span className="font-mono font-medium text-foreground">Password123!</span>
-            </p>
-          </div>
-
-          <div className="relative flex items-center justify-center text-xs uppercase text-muted-foreground my-4">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t" />
-            </div>
-            <span className="relative bg-card px-2">Or sign in with email</span>
-          </div>
-
           {/* Login Form */}
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
             <div className="space-y-1.5">
@@ -126,7 +85,7 @@ export default function LoginPage() {
                 id="email"
                 type="email"
                 placeholder="name@company.com"
-                disabled={isPending}
+                disabled={isSubmitting}
                 {...register('email')}
                 className={errors.email ? 'border-destructive focus-visible:ring-destructive' : ''}
               />
@@ -141,7 +100,7 @@ export default function LoginPage() {
                 id="password"
                 type="password"
                 placeholder="••••••••"
-                disabled={isPending}
+                disabled={isSubmitting}
                 {...register('password')}
                 className={errors.password ? 'border-destructive focus-visible:ring-destructive' : ''}
               />
@@ -150,7 +109,7 @@ export default function LoginPage() {
               )}
             </div>
 
-            <Button type="submit" variant="outline" className="w-full" disabled={isPending}>
+            <Button type="submit" variant="default" className="w-full font-semibold" disabled={isSubmitting}>
               <LogIn className="mr-2 h-4 w-4" />
               {isSubmitting ? 'Signing in...' : 'Sign in'}
             </Button>

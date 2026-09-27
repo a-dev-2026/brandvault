@@ -25,12 +25,14 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { apiClient } from '@/lib/api-client';
 import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
 
 export interface AppLayoutShellProps {
   user: {
     email: string;
     userId: string;
     workspaceId: string;
+    workspaceName?: string;
   };
   children: React.ReactNode;
 }
@@ -44,6 +46,7 @@ const navItems = [
 export function AppLayoutShell({ user, children }: AppLayoutShellProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -78,6 +81,7 @@ export function AppLayoutShell({ user, children }: AppLayoutShellProps) {
     setIsLoggingOut(true);
     try {
       await apiClient.post('/api/auth/logout');
+      queryClient.clear();
       toast.success('Logged out successfully');
       router.push('/login');
       router.refresh();
@@ -124,8 +128,8 @@ export function AppLayoutShell({ user, children }: AppLayoutShellProps) {
         </nav>
 
         <div className="border-t pt-4">
-          <div className="px-2 py-1 text-xs text-muted-foreground">
-            Workspace: <span className="font-mono text-foreground font-medium">Main</span>
+          <div className="px-2 py-1 text-xs text-muted-foreground truncate" title={user.workspaceName || 'Main Workspace'}>
+            Workspace: <span className="font-mono text-foreground font-medium">{user.workspaceName || 'Main Workspace'}</span>
           </div>
         </div>
       </aside>

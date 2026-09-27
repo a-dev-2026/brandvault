@@ -14,6 +14,8 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { apiClient } from '@/lib/api-client';
 import { toast } from 'sonner';
 
+import { useQueryClient } from '@tanstack/react-query';
+
 const signupSchema = z.object({
   email: z.string().trim().min(1, 'Email is required').email('Please enter a valid email address'),
   password: z.string().min(8, 'Password must be at least 8 characters long'),
@@ -24,6 +26,7 @@ type SignupFormValues = z.infer<typeof signupSchema>;
 
 export default function SignupPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [serverError, setServerError] = useState<string | null>(null);
 
   const {
@@ -47,6 +50,7 @@ export default function SignupPage() {
         password: values.password,
         workspaceName: values.workspaceName || undefined,
       });
+      queryClient.clear();
       toast.success('Account created successfully');
       router.push('/library');
       router.refresh();

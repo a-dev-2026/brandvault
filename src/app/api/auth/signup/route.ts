@@ -8,10 +8,11 @@ import { createSessionToken, setAuthCookie } from '@/server/auth';
 const signupSchema = z.object({
   email: z.string().trim().toLowerCase().email('Invalid email address'),
   password: z.string().min(8, 'Password must be at least 8 characters long'),
+  workspaceName: z.string().trim().optional(),
 });
 
 export const POST = withErrorHandling(async (req: NextRequest) => {
-  const { email, password } = await parseBody(req, signupSchema);
+  const { email, password, workspaceName } = await parseBody(req, signupSchema);
 
   const existingUser = await db.user.findUnique({
     where: { email },
@@ -33,7 +34,7 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
 
     const newWorkspace = await tx.workspace.create({
       data: {
-        name: `${email.split('@')[0]}'s Workspace`,
+        name: workspaceName && workspaceName.length > 0 ? workspaceName : 'Main',
         userId: newUser.id,
       },
     });
