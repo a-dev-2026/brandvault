@@ -1,0 +1,58 @@
+{
+  "name": "BrandVault Webhook Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "brandvault-events",
+        "options": {}
+      },
+      "id": "18f8c028-1122-48a5-b892-0b298418f77d",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "webhookId": "brandvault-webhook-trigger"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Process incoming BrandVault Event Payload\nconst body = $input.item.json.body;\nreturn {\n  event: body.event,\n  resourceId: body.resourceId,\n  userEmail: body.userEmail,\n  timestamp: body.timestamp,\n  summary: `Event [${body.event}] triggered by ${body.userEmail} for resource ${body.resourceId}`\n};"
+      },
+      "id": "7649ad9a-3211-4822-b349-8c9e4720188b",
+      "name": "Format Event Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        470,
+        300
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Format Event Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "b182049e-1452-4412-a12f-98124970f92b",
+  "meta": {
+    "instanceId": "brandvault-n8n-instance"
+  },
+  "id": "1"
+}
