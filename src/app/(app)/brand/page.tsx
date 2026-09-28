@@ -13,7 +13,6 @@ import {
   Save,
   CheckCircle2,
   Building2,
-  Type,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,15 +20,6 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { apiClient, ApiClientError } from '@/lib/api-client';
 import { toast } from 'sonner';
 
@@ -84,8 +74,6 @@ const brandFormSchema = z.object({
 
 type BrandFormValues = z.infer<typeof brandFormSchema>;
 
-const PRESET_FONTS = ['Inter', 'Roboto', 'Geist', 'Playfair Display', 'Outfit', 'Plus Jakarta Sans'];
-
 export default function BrandKitPage() {
   const queryClient = useQueryClient();
   const [logoError, setLogoError] = useState(false);
@@ -93,7 +81,7 @@ export default function BrandKitPage() {
   // 1. Fetch Brand Data
   const {
     data: brand,
-    isLoading: isBrandLoading,
+    isLoading,
     isError,
     error,
     refetch,
@@ -106,17 +94,8 @@ export default function BrandKitPage() {
     },
   });
 
-  // 2. Fetch Workspace Assets to filter type = FONT
-  const { data: assetsData, isLoading: isAssetsLoading } = useQuery<AssetsResponse, ApiClientError>({
-    queryKey: ['assets-font-selection'],
-    queryFn: () => apiClient.get<AssetsResponse>('/api/assets'),
-  });
-
-  const fontAssets = assetsData?.items?.filter((asset) => asset.type === 'FONT') || [];
-
   const isNotFound = isError && error?.status === 404;
   const isActualError = isError && !isNotFound;
-  const isLoading = isBrandLoading || isAssetsLoading;
 
   // 3. React Hook Form Setup
   const {
@@ -409,50 +388,17 @@ export default function BrandKitPage() {
                 {errors.logoUrl && <p className="text-xs font-medium text-destructive">{errors.logoUrl.message}</p>}
               </div>
 
-              {/* Default Font Select (chosen from workspace FONT assets or presets) */}
+              {/* Default Font Name — optional string field */}
               <div className="space-y-1.5">
-                <Label htmlFor="defaultFont">Default Font Family</Label>
-                <Select
-                  value={watchedFont || 'Inter'}
-                  onValueChange={(val) => setValue('defaultFont', val, { shouldValidate: true, shouldDirty: true })}
+                <Label htmlFor="defaultFont">Default Font Name (Optional)</Label>
+                <Input
+                  id="defaultFont"
+                  type="text"
+                  placeholder="e.g. Inter, Helvetica, Arial"
                   disabled={isSaving}
-                >
-                  <SelectTrigger id="defaultFont">
-                    <SelectValue placeholder="Select a font" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {/* Section 1: Uploaded Workspace Font Assets */}
-                    {fontAssets.length > 0 && (
-                      <SelectGroup>
-                        <SelectLabel className="flex items-center text-xs text-primary font-bold">
-                          <Type className="mr-1 h-3.5 w-3.5" /> Workspace Font Assets
-                        </SelectLabel>
-                        {fontAssets.map((asset) => (
-                          <SelectItem key={asset.id} value={asset.name}>
-                            {asset.name} (Asset)
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    )}
-
-                    {/* Section 2: Standard Presets */}
-                    <SelectGroup>
-                      <SelectLabel className="text-xs text-muted-foreground font-semibold">
-                        System Presets
-                      </SelectLabel>
-                      {PRESET_FONTS.map((font) => (
-                        <SelectItem key={font} value={font}>
-                          {font}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-                {fontAssets.length === 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    Tip: Upload FONT assets in your Library to see custom brand fonts here.
-                  </p>
-                )}
+                  {...register('defaultFont')}
+                  className={errors.defaultFont ? 'border-destructive focus-visible:ring-destructive' : ''}
+                />
                 {errors.defaultFont && (
                   <p className="text-xs font-medium text-destructive">{errors.defaultFont.message}</p>
                 )}
